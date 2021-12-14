@@ -1,4 +1,5 @@
 
+from datetime import datetime
 import os
 import pandas as pd
 import random
@@ -8,6 +9,8 @@ import subprocess
 import sys
 import time
 import unicodedata
+from functools import lru_cache
+from operator import itemgetter
 
 ################################################################################
 
@@ -109,7 +112,7 @@ class fasta:
     def write(output_filepath, read_fasta_li2):
         '''Writes read_fasta_li2 structure [[header1, header2, ...], [sequence1, sequence2, ...]] to provided output filepath''' 
         #create missing directories if path does not exist (requires bash)
-        subprocess.call("mkdir -p "+re.sub("[^\/]*$", "", output_filepath), shell=True)
+        subprocess.call(["mkdir", "-p", re.sub("[^\/]*$", "", output_filepath)])
         write_file = open(output_filepath, "w")
         write_file.write(fasta.list2_to_string(read_fasta_li2))
         write_file.close()
@@ -324,8 +327,45 @@ class string:
             if char in char_li:
                 input_li[i] = "\\"+char
         return("".join(input_li))
-        
-        
+    
+    
+    def longest_common_substring(x: str, y: str) -> (int, int, int):
+        # https://www.geeksforgeeks.org/longest-common-substring-dp-29/
+    
+        # function to find the longest common substring
+    
+        # Memorizing with maximum size of the memory as 1
+        @lru_cache(maxsize=1) 
+    
+        # function to find the longest common prefix
+        def longest_common_prefix(i: int, j: int) -> int:
+    
+            if 0 <= i < len(x) and 0 <= j < len(y) and x[i] == y[j]:
+                return 1 + longest_common_prefix(i + 1, j + 1)
+            else:
+                return 0
+    
+        # digonally computing the subproplems
+        # to decrease memory dependency
+        def digonal_computation():
+    
+            # upper right triangle of the 2D array
+            for k in range(len(x)):       
+                yield from ((longest_common_prefix(i, j), i, j)
+                            for i, j in zip(range(k, -1, -1),
+                                        range(len(y) - 1, -1, -1)))
+    
+            # lower left triangle of the 2D array
+            for k in range(len(y)):       
+                yield from ((longest_common_prefix(i, j), i, j)
+                            for i, j in zip(range(k, -1, -1),
+                                        range(len(x) - 1, -1, -1)))
+    
+        # returning the maximum of all the subproblems
+        length, i, j = max(digonal_computation(), key=itemgetter(0), default=(0, 0, 0))
+        return x[i: i + length]
+            
+            
     def percent_encode(input_str, char_li=[]):
         # https://en.wikipedia.org/wiki/Percent-encoding
         
@@ -338,8 +378,7 @@ class string:
                 input_li[i] = percent_encode_di[char]
         return("".join(input_li))
 
-                     
-                     
+        
     def remove_accent(input_str, force=False):
         '''remove accents from input string; fails for non-ascii characters'''
         # https://stackoverflow.com/questions/517923/what-is-the-best-way-to-remove-accents-normalize-in-a-python-unicode-string
@@ -462,6 +501,21 @@ class string:
             return False
         
 ################################################################################
+            
+class validate:
+
+    def __init__():
+        '''The validate class is initialized'''
+    
+    def date(date_str, pattern="%d-%b-%Y"):
+        try:
+            if date_str != datetime.strptime(date_str, pattern).strftime(pattern):
+                raise ValueError
+            return True
+        except ValueError:
+            return False
+        
+################################################################################
         
 class message:
     
@@ -536,10 +590,8 @@ class alignment:
             #uses bash to call mafft to perform a residue (nucleotide or amino acid) alignment
             mafft_output = re.sub("\.[^\.]*?$", "-mafft.fasta", input_fasta) #allows output_fasta to be the same as input_fasta
             os_call = "mafft "+input_fasta+" > "+mafft_output+" 2>/dev/null"
-            #print("os_call:", os_call) #?
             subprocess.call(os_call, shell=True)
             read_msa_li2 = fasta.read(mafft_output)
-            #print("read_msa_li2:", read_msa_li2) #?
             read_msa_li2[1] = [x.upper() for x in read_msa_li2[1]] #force mafft sequence output to be uppercase (expected mafft format)
             #MAFFT output is not case sensitive
             #AA translation function produces "x" as stop codon to avoid breaking scripts
@@ -566,30 +618,33 @@ class alignment:
     
         def build(msa_input, hmm_profile):
             '''Constructs hmm profile using from reference input multiple sequence alignment using hmmbuild (bash required)'''
-            os_call = "hmmbuild "+hmm_profile+" "+msa_input+" > /dev/null 2>/dev/null"
-            subprocess.call(os_call, shell=True)
+            os_call = ["hmmbuild", hmm_profile, msa_input]
+            subprocess.call(os_call, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
         
-        def align(fasta_input, hmm_profile, force_match_end = False):
+        def align(fasta_input, hmm_profile, n=0):
             '''Performs hmmalign on input fasta using provided hmm profile (bash required)'''
-            os_call = "hmmalign "+hmm_profile+" "+fasta_input+" 2>/dev/null"
-            read_str = subprocess.check_output(os_call, shell=True).decode("utf-8")
-            trim_sequence_str = "".join([x[8:].strip() for x in read_str.split("\n") if "Sequence" in x and "#" not in x])
-            if force_match_end: #terminal ends are known to be matching
-                #treatment for terminal ends
-                #force fit condition: non-matching (by hmmalign) ends are re-defined as matching if enough nucleotides/gaps are available
-                end_li = [re.findall("^[-a-z]*", trim_sequence_str)[0], re.findall("[-a-z]*$", trim_sequence_str)[0]]
-                trim_sequence_str = trim_sequence_str[len(end_li[0]):len(trim_sequence_str)-len(end_li[1])]
-                for i, end in enumerate(end_li):
-                    gap_count = end.count("-")
-                    lower_count = len(end.replace("-", ""))
-                    #add corrected ends to trim_sequence_str conditionally using multiplicative string logic
-                    if gap_count > 0:
-                        #move misaligned residues to sides (easier to remove with end treatments)
-                        trim_sequence_str = ("-"*(gap_count-lower_count) + end.replace("-", "")[:-gap_count] + end.replace("-", "")[-gap_count:].upper())*abs(i-1) + \
-                        trim_sequence_str + (end.replace("-", "")[:gap_count].upper() + end.replace("-", "")[gap_count:] + ("-"*(gap_count-lower_count)))*i
-            return(trim_sequence_str)
+            # force align "n" number of unmatched terminal residues
+            # reference: https://github.com/EddyRivasLab/hmmer/issues/254
             
+            os_call = ["hmmalign", hmm_profile, fasta_input]
+            read_str = subprocess.check_output(os_call, stderr=subprocess.DEVNULL).decode("utf-8")
+            read_sequence_str = "".join([x[8:].strip() for x in read_str.split("\n") if "Sequence" in x and "#" not in x])
+            #treatment for terminal ends
+            #force fit condition: non-matching (by hmmalign) ends are re-defined as matching if enough nucleotides/gaps are available
+            end_li = [re.findall("^[-a-z]*", read_sequence_str)[0], re.findall("[-a-z]*$", read_sequence_str)[0]]
+            trim_sequence_str = read_sequence_str[len(end_li[0]):len(read_sequence_str)-len(end_li[1])]
+            if n > 0:
+                for i, end in enumerate(end_li):
+                    lower_li = [x for x in end if x.islower()]
+                    lower_count, gap_count = len(lower_li), end.count("-")
+                    # must be more gaps than unmatched
+                    if lower_count <= gap_count and lower_count <= n:
+                        upper_str = "".join(lower_li).upper()
+                        trim_sequence_str  = upper_str*(-i+1) + trim_sequence_str + upper_str*(-i+1)
+                        end_li[i] = (gap_count-lower_count)*"-"
+            return(trim_sequence_str, end_li)
+                
 
     class blast:
         
@@ -598,6 +653,6 @@ class alignment:
         
         def build(fasta_input):
             '''Constructs BLAST database under same path/name as input multiple sequence alignment fasta'''
-            os_call = "makeblastdb -dbtype nucl -in "+fasta_input+" > /dev/null 2>/dev/null"
-            subprocess.call(os_call, shell=True)
+            os_call = ["makeblastdb", "-dbtype=nucl", "-in="+fasta_input]
+            subprocess.call(os_call, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             

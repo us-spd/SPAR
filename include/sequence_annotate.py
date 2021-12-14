@@ -1,10 +1,12 @@
 
-from Bio.SubsMat import MatrixInfo
+#from Bio.SubsMat import MatrixInfo
+from Bio.Align import substitution_matrices
 import json
 import math
 import numpy as np
 import os
 import re
+import shutil
 from sklearn.cluster import SpectralClustering
 #import statistics as stats
 import subprocess
@@ -21,7 +23,7 @@ else:
 ################################################################################
         
 spar_path = re.sub("/include$", "", os.path.dirname(os.path.realpath(__file__)))
-valid_organism_li = [d for d in os.listdir(spar_path+"/required/") if os.path.isdir(spar_path+"/required/"+d) and d != "blastdb"] + ["PRRSV"]
+valid_organism_li = [d for d in os.listdir(spar_path+"/required/") if os.path.isdir(spar_path+"/required/"+d) and d != "blastdb"]
 if bash_path != None:
     os.environ["PATH"] = bash_path
 
@@ -33,12 +35,19 @@ class sequence_annotate:
     def __init__():
         '''The sequence_annotate class is initialized'''
     
-    class prep:
+    class prepare:
         
-        def __init__():
-            '''The prep subclass is initialized'''
+        def __init__(self):
+            '''The prepare subclass is initialized'''
+            
+            # check required bash utilities
+            required_program_li = ["hmmbuild", "mafft"]
+            missing_programs = string.readable_list([x for x in required_program_li if shutil.which(x) == None])
+            if len(missing_programs) > 0:
+                raise Exception("The following dependencies could not be found: "+missing_programs+". Please install and re-run.")
+                
         
-        def cluster_expression(sequence_li, cropped_msa_li):
+        def cluster_expression(self, sequence_li, cropped_msa_li):
             '''Iterative clustering of residues to produce selective (minimize incorrect matches) and specific (maximize correct matches) regular expressions'''
             # https://stats.stackexchange.com/questions/123060/clustering-a-long-list-of-strings-words-into-similarity-groups
             # https://www.programcreek.com/python/example/85778/sklearn.cluster.AffinityPropagation
@@ -47,7 +56,9 @@ class sequence_annotate:
             
             aa_li = [x for x in "ARNDCEQGHILKMNFPSTWYV"]
             ambiguous_aa_di = {"B":["N", "D"], "Z":["E", "Q"], "J":["I", "L"], "X":aa_li}
-            blosum_di = MatrixInfo.blosum62
+            #blosum_di = MatrixInfo.blosum62
+            b_matrix = substitution_matrices.load("BLOSUM62")
+            blosum_di = {(b_matrix.alphabet[i1], b_matrix.alphabet[i2]): b_matrix[i1, i2]  for i1, x in enumerate(test) for i2, y in enumerate(x)}
             
             read_fasta_li = [x.replace("-", "") for x in sequence_li]    
             for crop_index, crop in enumerate(cropped_msa_li):
@@ -151,7 +162,7 @@ class sequence_annotate:
             return(output)
                 
                     
-        def calculate_shannon(input_fasta):
+        def calculate_shannon(self, input_fasta):
             '''Calculates Shannon diversity index for each column in MSA fasta to gauge homology/conservation'''
             # https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/shannon.htm
             
@@ -171,7 +182,7 @@ class sequence_annotate:
             return(shannon_li)
             
             
-        def regex_select(protein_directory, cropped_regex_json):
+        def regex_select(self, protein_directory, cropped_regex_json):
             # from descending order of highest homology/conservation, regions are converted into regular expressions
             # regulate maximum distance/overlap between regions
             
@@ -183,7 +194,7 @@ class sequence_annotate:
                     cropped_regex_json[annotation] = []
                     protein_fasta = protein_directory+"/msa/"+fasta_file
                     protein_fasta_li2 = fasta.read(protein_fasta)
-                    shannon_li = sequence_annotate.prep.calculate_shannon(protein_fasta)
+                    shannon_li = self.calculate_shannon(protein_fasta)
                     shannon_window_li = [sum(shannon_li[x:x+15]) for x in range(1, len(shannon_li)-16)] # allow near complete overlap with terminal ends
                     shannon_window_li2 = [[x+1, y] for x, y in enumerate(shannon_window_li)] # index, value
                     shannon_window_li2.sort(reverse = True, key = lambda x: x[1]) # sort by highest window sum
@@ -204,7 +215,7 @@ class sequence_annotate:
                     
                     for index, index_value in enumerate(index_li):
                         cropped_msa_li = [x[index_value:index_value+15] for x in protein_fasta_li2[1]]
-                        cluster = sequence_annotate.prep.cluster_expression(protein_fasta_li2[1], cropped_msa_li)
+                        cluster = self.cluster_expression(protein_fasta_li2[1], cropped_msa_li)
                         if cluster != None: # failure when region is highly diverse, resulting in complex, non-specific regex
                             # regex_select() requires indices of residues relative to save_msa
                             frame_mod = re.findall("#frameshift_modification=\((.*)\)", protein_fasta_li2[0][0])
@@ -247,7 +258,7 @@ class sequence_annotate:
                         json.dump(cropped_regex_json, outfile)
                             
             
-        def check_msa(organism, dir_path=spar_path):
+        def check_msa(self, organism, dir_path=spar_path):
             '''Checks msa_save for consistent logic and constructs msa_build file (reference for hmm profile construction)'''
             #requires manual modification for translational frameshifts, limited to -1 frameshifts (not user friendly)
             
@@ -322,7 +333,7 @@ class sequence_annotate:
                     fasta.write(output_nucleotide_msa_directory + "/" + file, read_fasta_li2)
             
             
-        def build_reference_gff(organism, dir_path=spar_path):
+        def build_reference_gff(self, organism, dir_path=spar_path):
             '''Builds reference template gff3 file (if one does not already exist)'''
             # user may make modifications to the template file or provide their own
             
@@ -410,7 +421,7 @@ class sequence_annotate:
                 write_file.close()
                 
         
-        def main(organism):
+        def main(self, organism):
             '''Checks that all necessary dependencies exist; prompts user to install missing programs or build missing reference files'''
             
             if organism in valid_organism_li:
@@ -441,7 +452,7 @@ class sequence_annotate:
                                        response_y="You have selected to continue. Please wait. Notice: this is a slow process.", \
                                        response_n="You have chosen to skip setup for "+organism+"."):
                         if len([x for x in msa_save_li if x not in msa_build_li]) != 0:
-                            sequence_annotate.prep.check_msa(organism, spar_path)
+                            self.check_msa(organism, spar_path)
                         if len([x for x in msa_save_li if x not in hmm_build_li]) != 0:
                             #use hmmbuild to create hmm profiles (requires bash)
                             target_dir = spar_path + "/required/" + organism + "/hmm_profiles/msa_build"
@@ -453,9 +464,9 @@ class sequence_annotate:
                                 hmm_profile = build_dir+"/"+re.findall("^[^.]*", target_file)[0]+".hmm"
                                 alignment.hmm.build(msa_input, hmm_profile)
                         if len([x for x in msa_save_li if x not in cropped_regex_json]) != 0:
-                            sequence_annotate.prep.regex_select(spar_path+"/required/"+organism+"/protein", cropped_regex_json)
+                            self.regex_select(spar_path+"/required/"+organism+"/protein", cropped_regex_json)
                         if not os.path.isfile(spar_path+"/required/"+organism+"/gff3/template.gff3"):
-                            sequence_annotate.prep.build_reference_gff(organism, spar_path)
+                            self.build_reference_gff(organism, spar_path)
                         print("Setup for "+organism+" finished successfully.", file=sys.stderr)
                         return(True)
                 else:
@@ -471,6 +482,12 @@ class sequence_annotate:
             '''The process subclass is initialized'''
             # value appended to file names, avoids overwriting files when running in parallel
             
+            # check required bash utilities
+            required_program_li = ["hmmalign"]
+            missing_programs = string.readable_list([x for x in required_program_li if shutil.which(x) == None])
+            if len(missing_programs) > 0:
+                raise Exception("The following dependencies could not be found: "+missing_programs+". Please install and re-run.")
+            
             self.required_path = spar_path + "/required"
             self.temporary_path = spar_path + "/temporary"
             if os.path.isdir(temp_dir):
@@ -478,7 +495,8 @@ class sequence_annotate:
             if organism in valid_organism_li:
                 self.organism = organism
             else:
-                raise Exception("invalid input detected:", organism)
+                raise Exception("Invalid input supplied for organism field:", organism)
+                
             self.total_cds = [re.findall("^[^.]*", f)[0] for f in os.listdir(self.required_path+"/"+self.organism+"/hmm_profiles/msa_save") if ".fa" in f]
             with open(self.required_path+"/"+self.organism+"/protein/protein.json") as json_file:  
                 cropped_regex_json = json.load(json_file)
@@ -565,7 +583,7 @@ class sequence_annotate:
                     elif i == len(s1):
                         break
                 return(0)
-            
+                
             dna_str = dna_str.upper().replace("U", "T").replace("-", "")
             # check for reading frame changes in matched region/s
             match_li2, match_li3 = [separate_match_li2[0]], []
@@ -592,13 +610,13 @@ class sequence_annotate:
             # tracks the corrected homologous sequence length relative to cropped alignments in else statement
             # necessary for finding location of translational frameshift/s; unable to reliably determine reading frame
             crop_li3 = [] #crop_dna_li, crop_msa_build_li
-            trim_sequence_str = dna_str[start:stop]
+            trim_sequence_str, end_li = dna_str[start:stop], ["", ""]
             if translate_str[:-1].count("x") != 0 or separate_match_li2[0][2] != 0 or separate_match_li2[-1][2] != 1:
                 read_fasta_str = ">Sequence\n"+dna_str[start:stop]
                 function_di = {
-                    alignment.hmm.align: [hmmalign_input, hmm_build]     
+                    alignment.hmm.align: [hmmalign_input, hmm_build, 3] # force align up to 3 unmatched terminal residues
                 }
-                trim_sequence_str = nested.temporary(hmmalign_input, read_fasta_str, function_di)[0]
+                trim_sequence_str, end_li = nested.temporary(hmmalign_input, read_fasta_str, function_di)[0]
                 
             elif len(match_li3) > 1:
                 in_sequence_li = []
@@ -619,11 +637,13 @@ class sequence_annotate:
                     function_di = {
                         alignment.hmm.build: [msa_build, hmm_build], 
                         nested.temporary: [hmmalign_input, ">Sequence\n"+dna_segment_str, {
-                            alignment.hmm.align: [hmmalign_input, hmm_build, True]     
+                            # force align up to all unmatched terminal residues
+                            alignment.hmm.align: [hmmalign_input, hmm_build, crop_msa_build_li[1]-crop_msa_build_li[0]]    
                         }]
                     }
-                    in_sequence_str = nested.temporary(msa_build, read_fasta_str, function_di)[-1][0]
-                    
+                    hmm_out = nested.temporary(msa_build, read_fasta_str, function_di)[-1][0]
+                    in_sequence_str = hmm_out[0].join(hmm_out[1]) # combine trim_sequence_str and end_li
+                
                     # ignore/remove terminal gaps and update crop_li3 (crop_msa_build_li section)
                     for i, pattern in enumerate(["^\-*", "\-*$"]):
                         	terminal_match, scale_end_li = re.findall(pattern, in_sequence_str)[0], [1, -1]
@@ -641,7 +661,7 @@ class sequence_annotate:
                             	if lower_count > 0: # dna_segment too long
                             		in_sequence_str = re.sub("^"*abs(i-1)+terminal_match+"$"*i, terminal_match.upper(), in_sequence_str)
                     # compares total potential frame changes in aligned area to known reading frame of matched regex
-                    sub_gap = (in_sequence_str.count("-") - len([x for x in in_sequence_str if x.islower()]))%3 # remainder returns positive number
+                    sub_gap = (in_sequence_str.count("-") - len([x for x in in_sequence_str if x.islower()]))%3
                     frame_change = crop_li2[0][0] - crop_li2[1][0]
                     if sub_gap != frame_change and sub_gap != 3-frame_change and sub_gap != 3+frame_change:
                         in_sequence_str = in_sequence_str.replace("-", "").upper()
@@ -673,10 +693,11 @@ class sequence_annotate:
                 trim_sequence_str = out_sequence_li[0]
                 for index in range(len(in_sequence_li)):
                     trim_sequence_str += in_sequence_li[index]
-                    trim_sequence_str += out_sequence_li[index+1]  
-                    
-            end_li = [re.findall("^[-a-z]*", trim_sequence_str)[0], re.findall("[-a-z]*$", trim_sequence_str)[0]]
-            trim_sequence_str = trim_sequence_str[len(end_li[0]):len(trim_sequence_str)-len(end_li[1])]
+                    trim_sequence_str += out_sequence_li[index+1]
+                # extract end_li from trim_sequence_str
+                end_li = [re.findall("^[-a-z]*", trim_sequence_str)[0], re.findall("[-a-z]*$", trim_sequence_str)[0]]
+                trim_sequence_str = trim_sequence_str[len(end_li[0]):len(trim_sequence_str)-len(end_li[1])]
+                
             # fragmentation of the modified input nucleotide sequence
             # lowercase characters and gaps ("-") in the hmm alignemnt are indicative of low homology regions where reading frame shifts are most likely
             modified_nucleotide_li = re.findall("[A-Z]+[a-z\-]*", trim_sequence_str)
@@ -686,13 +707,15 @@ class sequence_annotate:
             match_li2 = [x for x in separate_match_li2 if x[1]*3+x[0] > start]
             if len(match_li2) == 0:
                 match_li2 = [separate_match_li2[-1]]
-            reading_frame = match_li2[0][0]
-            # read_frame may be incorrect if frameshift/s occur prior to regex match read_frame is based on
-            start_to_regex = re.sub("[a-z]", "", trim_sequence_str[:match_li2[0][1]*3+reading_frame - start])
-            corrected_reading_frame = 0
-            while (start + len(start_to_regex) + corrected_reading_frame)%3 != reading_frame:
-                corrected_reading_frame += 1  
             
+            # determine reading frame based on HMMER alignment
+            reading_frame = (3 - len([x for x in end_li[0] if not x.islower()]) % 3) % 3
+            """
+            # determine reading frame based on first regex match
+            reading_frame = match_li2[0][0]
+            start_to_match = trim_sequence_str[:match_li2[0][1]*3+reading_frame - start]
+            reading_frame = (reading_frame + len([x for x in start_to_match if not x.islower()])) % 3
+            """
             frameshift_li2 = [] # start, stop, type (translational=0, error=1)
             read_len_correction = 0
             for modified_nucleotide_index, modified_nucleotide_str in enumerate(modified_nucleotide_li[:-1]):
@@ -727,7 +750,7 @@ class sequence_annotate:
                         read_len_correction -= slip_len
                 else: # must read next segment for presence of stop codons
                     # reading frame determination
-                    sub_gap = (homolog_len-read_len)%3 #remainder returns positive number
+                    sub_gap = (homolog_len-read_len)%3
                     if sub_gap != 0:
                         end_gap_str = re.findall("[a-z\-]*$", modified_nucleotide_str)[0]
                         if len(end_gap_str) > 0:
@@ -743,8 +766,8 @@ class sequence_annotate:
                             slip_len = -1
                         read_str = "".join(modified_nucleotide_li[:modified_nucleotide_index+2])
                         sub_str = "".join(modified_nucleotide_li[:modified_nucleotide_index])+modified_nucleotide_str+modified_nucleotide_li[modified_nucleotide_index+1]
-                        translate_read_str = string.translate_nucleotides(read_str.replace("-", ""), corrected_reading_frame)
-                        translate_sub_str = string.translate_nucleotides(sub_str.replace("-", ""), corrected_reading_frame)
+                        translate_read_str = string.translate_nucleotides(read_str.replace("-", ""), reading_frame)
+                        translate_sub_str = string.translate_nucleotides(sub_str.replace("-", ""), reading_frame)
                         if translate_sub_str[:-1].count("x") < translate_read_str[:-1].count("x"):
                             modified_nucleotide_li[modified_nucleotide_index] = modified_nucleotide_str
                             frameshift_li2.append(frameshift_li)
@@ -753,7 +776,7 @@ class sequence_annotate:
             # correct frameshift locations based on adjusted start
             frameshift_li2 = [[x[0]+start, x[1]+start, x[2]] for x in frameshift_li2]
             nucleotide_out_li = end_li
-            return(modified_nucleotide_str, frameshift_li2, nucleotide_out_li, corrected_reading_frame)
+            return(modified_nucleotide_str, frameshift_li2, nucleotide_out_li, reading_frame)
     
         
         def main(self, dna_str, choose_match_li):
@@ -761,12 +784,12 @@ class sequence_annotate:
             fix_dna_str = dna_str.upper().replace("U", "T").replace("-", "")
             total_annotate_li2 = []
             total_match_di = self.match_regex(fix_dna_str, choose_match_li)
-            for key in total_match_di:
-                total_match_di[key].sort(key=lambda x: x[1])
-                if len(total_match_di[key]) > 1: # check if enough conserved matches, minimum 2
+            for key, match_li2 in total_match_di.items():
+                match_li2.sort(key=lambda x: x[1])
+                if len(match_li2) > 1: # check if enough conserved matches, minimum 2
                     # separate values that fall out of order (possible duplicate sequences or false matches)
-                    separate_match_li3 = [[total_match_di[key][0]]]
-                    for value in total_match_di[key]:
+                    separate_match_li3 = [[match_li2[0]]]
+                    for value in match_li2:
                         if value not in separate_match_li3[-1]:
                             if value[2] > separate_match_li3[-1][-1][2]:
                                 separate_match_li3[-1].append(value)            
@@ -787,7 +810,7 @@ class sequence_annotate:
                             separate_match_li3[separate_match_index] = []
                     location_li3 = [[[int(z) for z in y] for y in x] for x in location_li3] # estimated values may be decimals
                     separate_match_li3 = [x for x in separate_match_li3 if x != []]
-    
+                    
                     # merge overlapping locations
                     len_location_li3 = None
                     while len_location_li3 == None or len_location_li3 != len(location_li3):
@@ -810,7 +833,7 @@ class sequence_annotate:
                         if separate_match_li2[0][2] != 0:
                             # estimated start must be in same reading frame as separate_match_li2[0] value
                             start = location_li3[loc_index][1][0]
-                            while abs(start%3) != separate_match_li2[0][0]:
+                            while start%3 != separate_match_li2[0][0]:
                                 start -= 1
                             if start < 0:
                                 start = 0
@@ -854,3 +877,4 @@ class sequence_annotate:
             # 0:translation type, 1:start/stop range, 2:reading frame, 3:location of translational frameshift, 4:homology adjustment (error correction), 5:sequence length, 6:AA sequence
             return(total_annotate_li2)
             
+    

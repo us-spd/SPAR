@@ -1,13 +1,14 @@
 
 import os
 import pandas as pd
+import shutil
 import re
 
 
 if __name__ == "__main__":
-    from misc import alignment, nested
+    from misc import alignment, nested, string
 else:
-    from .misc import alignment, nested
+    from .misc import alignment, nested, string
     
 ################################################################################
     
@@ -19,6 +20,13 @@ spar_path = re.sub("/include$", "", os.path.dirname(os.path.realpath(__file__)))
 class prrsv_orf5_rflp:
     def __init__(self, temp_dir=""):
         '''The prrsv_orf5_rflp class is initialized'''
+        
+        # check required bash utilities
+        required_program_li = ["hmmalign"]
+        missing_programs = string.readable_list([x for x in required_program_li if shutil.which(x) == None])
+        if len(missing_programs) > 0:
+            raise Exception("The following dependencies could not be found: "+missing_programs+". Please install and re-run.")
+            
         
         self.temporary_path = spar_path + "/temporary"
         if os.path.isdir(temp_dir):
@@ -57,12 +65,12 @@ class prrsv_orf5_rflp:
             rflp_value = match_rflp(dna_sequence, ["X" for i in range(3)])
             if "X" in "".join(rflp_value) or len(nucleotide_sequence) != 603:
                 hmmalign_input = self.temporary_path+"/hmmalign_input.fasta"
-                hmm_build = spar_path+"/required/PRRSV2/hmm_profiles/hmm_build/ORF5.hmm"
+                hmm_build = spar_path+"/required/PRRSV-2/hmm_profiles/hmm_build/ORF5.hmm"
                 read_fasta_str = ">Sequence\n"+dna_sequence
                 function_di = {
-                    alignment.hmm.align: [hmmalign_input, hmm_build]     
+                    alignment.hmm.align: [hmmalign_input, hmm_build]  
                 }
-                hmmalign_simple = nested.temporary(hmmalign_input, read_fasta_str, function_di)[0]
+                hmmalign_simple = nested.temporary(hmmalign_input, read_fasta_str, function_di)[0][0]
                 hmmalign_simple = re.sub("[a-z]+", "", hmmalign_simple)
                 rflp_value = match_rflp(hmmalign_simple, ["X" for i in range(3)])
         return("-".join(rflp_value))

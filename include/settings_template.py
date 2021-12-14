@@ -5,6 +5,7 @@
 
 bash_path = None # copy/paste terminal output here
 
+
 minimal_stderr = False # ignore affirmative sequence processing and error traceback
 
 
@@ -22,13 +23,13 @@ translational_frameshift_di = {
     "fs_type": -1,
     "fs_product": ["ORF1ab"]
   },
-  "PRRSV1": {
+  "PRRSV-1": {
     "fs_regex": "TTTAAACTG.TAGCCGCCAGCGGCTTGACCCGCTGTGG",
     "fs_index": 10,
     "fs_type": -1,
     "fs_product": ["ORF1ab", "nsp9"]
   },
-  "PRRSV2": {
+  "PRRSV-2": {
     "fs_regex": "TTTAAACTG.TAGCCGCCAGCGGCTTGACCCGCTGTGG",
     "fs_index": 10,
     "fs_type": -1,
