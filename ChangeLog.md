@@ -1,3 +1,9 @@
+1.1.1 [2021-12-14]
+------------------
+
+ * corrected typo in sequence_annotate.py
+ * re-ordered variable declaration to avoid omission in species_identify.py 
+
 1.1.0 [2021-12-13]
 ------------------
 

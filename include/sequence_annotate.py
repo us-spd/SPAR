@@ -58,7 +58,7 @@ class sequence_annotate:
             ambiguous_aa_di = {"B":["N", "D"], "Z":["E", "Q"], "J":["I", "L"], "X":aa_li}
             #blosum_di = MatrixInfo.blosum62
             b_matrix = substitution_matrices.load("BLOSUM62")
-            blosum_di = {(b_matrix.alphabet[i1], b_matrix.alphabet[i2]): b_matrix[i1, i2]  for i1, x in enumerate(test) for i2, y in enumerate(x)}
+            blosum_di = {(b_matrix.alphabet[i1], b_matrix.alphabet[i2]): b_matrix[i1, i2]  for i1, x in enumerate(b_matrix) for i2, y in enumerate(x)}
             
             read_fasta_li = [x.replace("-", "") for x in sequence_li]    
             for crop_index, crop in enumerate(cropped_msa_li):

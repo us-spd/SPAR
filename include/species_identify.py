@@ -50,6 +50,8 @@ class species_identify:
                 blastdb_dir = self.temporary_path # build specific, temporary blastdb
                 os_call = "blastdbcmd -info -db "+blastdb_dir+"/blastdb.fasta > /dev/null 2>/dev/null"
                 self.check_blastdb_li = []
+            # assign blastdb
+            self.blastdb = blastdb_dir+"/blastdb.fasta"
             if 0 not in self.check_blastdb_li: #and message.proceed(input_value="BLAST database must be constructed. Continue? (y/n) ", response_n="Not an optional step. Process terminated."):            
                 blast_rf_li3 = []
                 for organism in self.input_organism_li:
@@ -65,13 +67,13 @@ class species_identify:
                         blast_rf_li3.append(blast_rf_li2)
                 blast_rf_li2 = [[head for blast_rf_li2 in blast_rf_li3 for head in blast_rf_li2[0]], \
                                 [seq for blast_rf_li2 in blast_rf_li3 for seq in blast_rf_li2[1]]]
-                self.blastdb = blastdb_dir+"/blastdb.fasta"
                 fasta.write(self.blastdb, blast_rf_li2)
                 alignment.blast.build(self.blastdb)
                 print("BLAST database successfully constructed.", file=sys.stderr)
-                self.check_blastdb_li = [subprocess.call(os_call.replace(".fasta", ""), shell=True), subprocess.call(os_call, shell=True)]
-                if self.check_blastdb_li[0] == 0:
-                    self.blastdb = self.blastdb.replace(".fasta", "")
+            # validate blastdb
+            self.check_blastdb_li = [subprocess.call(os_call.replace(".fasta", ""), shell=True), subprocess.call(os_call, shell=True)]
+            if self.check_blastdb_li[0] == 0:
+                self.blastdb = self.blastdb.replace(".fasta", "")
         
         
     def main(self, read_fasta_li2):
