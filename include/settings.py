@@ -1,13 +1,8 @@
-'''Template for settings file. Original should not be commited to GitHub.'''
-
 # when running run.py in python console, set environment path to match bash
 # run the following code in unix shell: echo $PATH
-
-bash_path = None # copy/paste terminal output here
-
+bash_path = "" # copy/paste terminal output here if you encounter pathing issues
 
 minimal_stderr = False # ignore affirmative sequence processing and error traceback
-
 
 # describe values necessary for translational frameshift treatment (maximum one translational frameshift site per organism)
 translational_frameshift_di = {
